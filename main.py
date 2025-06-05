@@ -1,1130 +1,1155 @@
 import pygame
 import random
 import math
+from collections import Counter
 
 
-"""
-10 x 20 square grid
-shapes: S, Z, I, O, J, L, T
-represented in order by 0 - 6
-"""
+# --- Configuration ---
+class Config:
+    S_WIDTH = 800
+    S_HEIGHT = 700
+    PLAY_WIDTH = 300
+    PLAY_HEIGHT = 600
+    BLOCK_SIZE = 30
 
-pygame.mixer.init()
-score = 0
+    TOP_LEFT_X = (S_WIDTH - PLAY_WIDTH) // 2
+    TOP_LEFT_Y = S_HEIGHT - PLAY_HEIGHT
 
-volume = 0.5  # Default volume
+    GRID_ROWS = 20
+    GRID_COLS = 10
 
-# Load sounds
-humiliation_sound = pygame.mixer.Sound(
-    "resources/sounds/misc/humiliation.wav"
-)  # 1 line
-multi_kill_sound = pygame.mixer.Sound("resources/sounds/misc/multikill.wav")  # 2 lines
-mega_kill_sound = pygame.mixer.Sound("resources/sounds/misc/megakill.wav")  # 3 lines
-ultra_kill_sound = pygame.mixer.Sound("resources/sounds/misc/ultrakill.wav")
-monster_kill_sound = pygame.mixer.Sound("resources/sounds/misc/monsterkill.wav")
-godlike_sound = pygame.mixer.Sound("resources/sounds/misc/godlike.wav")
-holyshit_sound = pygame.mixer.Sound("resources/sounds/misc/holyshit.wav")
-killing_spree_sound = pygame.mixer.Sound("resources/sounds/misc/killingspree.wav")
-ludacriss_kill_sound = pygame.mixer.Sound("resources/sounds/misc/ludacrisskill.wav")
-rampage_sound = pygame.mixer.Sound("resources/sounds/misc/rampage.wav")
-unstoppable_sound = pygame.mixer.Sound("resources/sounds/misc/unstoppable.wav")
-wicked_sick_sound = pygame.mixer.Sound("resources/sounds/misc/wickedsick.wav")
-oneandonly_sound = pygame.mixer.Sound("resources/sounds/misc/oneandonly.wav")
-prepare_sound = pygame.mixer.Sound("resources/sounds/misc/prepare.wav")
-firstblood_sound = pygame.mixer.Sound("resources/sounds/misc/firstblood.wav")
-tap_sound = pygame.mixer.Sound("resources/sounds/misc/tap.wav")
-gogamble_sound = pygame.mixer.Sound("resources/sounds/misc/gogamble.wav")
-dangit_sound = pygame.mixer.Sound("resources/sounds/misc/dangit.wav")
-jackpot_sound = pygame.mixer.Sound("resources/sounds/misc/jackpot.wav")
-coinhandle_sound = pygame.mixer.Sound("resources/sounds/misc/coinhandle.wav")
+    # Shape formats
+    S_SHAPE = [
+        [".....", ".....", "..00.", ".00..", "....."],
+        [".....", "..0..", "..00.", "...0.", "....."],
+    ]
+    Z_SHAPE = [
+        [".....", ".....", ".00..", "..00.", "....."],
+        [".....", "..0..", ".00..", ".0...", "....."],
+    ]
+    I_SHAPE = [
+        ["..0..", "..0..", "..0..", "..0..", "....."],
+        [".....", "0000.", ".....", ".....", "....."],
+    ]
+    O_SHAPE = [[".....", ".....", ".00..", ".00..", "....."]]
+    J_SHAPE = [
+        [".....", ".0...", ".000.", ".....", "....."],
+        [".....", "..00.", "..0..", "..0..", "....."],
+        [".....", ".....", ".000.", "...0.", "....."],
+        [".....", "..0..", "..0..", ".00..", "....."],
+    ]
+    L_SHAPE = [
+        [".....", "...0.", ".000.", ".....", "....."],
+        [".....", "..0..", "..0..", "..00.", "....."],
+        [".....", ".....", ".000.", ".0...", "....."],
+        [".....", ".00..", "..0..", "..0..", "....."],
+    ]
+    T_SHAPE = [
+        [".....", "..0..", ".000.", ".....", "....."],
+        [".....", "..0..", "..00.", "..0..", "....."],
+        [".....", ".....", ".000.", "..0..", "....."],
+        [".....", "..0..", ".00..", "..0..", "....."],
+    ]
 
-pygame.font.init()
+    SHAPES = [S_SHAPE, Z_SHAPE, I_SHAPE, O_SHAPE, J_SHAPE, L_SHAPE, T_SHAPE]
+    SHAPE_COLORS = [
+        (0, 255, 0),
+        (255, 0, 0),
+        (0, 255, 255),
+        (255, 255, 0),
+        (255, 165, 0),
+        (0, 0, 255),
+        (128, 0, 128),
+    ]
 
-
-def set_all_sounds_volume(vol):
-    humiliation_sound.set_volume(vol)
-    multi_kill_sound.set_volume(vol)
-    mega_kill_sound.set_volume(vol)
-    ultra_kill_sound.set_volume(vol)
-    monster_kill_sound.set_volume(vol)
-    godlike_sound.set_volume(vol)
-    holyshit_sound.set_volume(vol)
-    killing_spree_sound.set_volume(vol)
-    ludacriss_kill_sound.set_volume(vol)
-    rampage_sound.set_volume(vol)
-    unstoppable_sound.set_volume(vol)
-    wicked_sick_sound.set_volume(vol)
-    oneandonly_sound.set_volume(vol)
-    prepare_sound.set_volume(vol)
-    firstblood_sound.set_volume(vol)
-    tap_sound.set_volume(vol)
-    gogamble_sound.set_volume(vol)
-    dangit_sound.set_volume(vol)
-    jackpot_sound.set_volume(vol)
-    coinhandle_sound.set_volume(vol)
-    pygame.mixer.music.set_volume(vol)
-
-
-# GLOBALS VARS
-s_width = 800
-s_height = 700
-play_width = 300  # meaning 300 // 10 = 30 width per block
-play_height = 600  # meaning 600 // 20 = 20 height per blo ck
-block_size = 30
-
-top_left_x = (s_width - play_width) // 2
-top_left_y = s_height - play_height
+    SLOT_SYMBOLS = ["🍒", "🍊", "🍋", "🍇", "💎", "7️⃣"]
+    SLOT_VALUES = {"🍒": 0, "🍊": 1, "🍋": 1.5, "🍇": 4, "💎": 25, "7️⃣": 100}
+    SLOT_WEIGHTS = [40, 30, 15, 10, 4, 1]
 
 
-# SHAPE FORMATS
+# --- Asset Manager ---
+class AssetManager:
+    def __init__(self):
+        pygame.mixer.init()
+        pygame.font.init()
+        self.sounds = {
+            "humiliation": pygame.mixer.Sound("resources/sounds/misc/humiliation.wav"),
+            "multi_kill": pygame.mixer.Sound("resources/sounds/misc/multikill.wav"),
+            "mega_kill": pygame.mixer.Sound("resources/sounds/misc/megakill.wav"),
+            "ultra_kill": pygame.mixer.Sound("resources/sounds/misc/ultrakill.wav"),
+            "monster_kill": pygame.mixer.Sound("resources/sounds/misc/monsterkill.wav"),
+            "godlike": pygame.mixer.Sound("resources/sounds/misc/godlike.wav"),
+            "holyshit": pygame.mixer.Sound("resources/sounds/misc/holyshit.wav"),
+            "killing_spree": pygame.mixer.Sound(
+                "resources/sounds/misc/killingspree.wav"
+            ),
+            "ludacriss_kill": pygame.mixer.Sound(
+                "resources/sounds/misc/ludacrisskill.wav"
+            ),
+            "rampage": pygame.mixer.Sound("resources/sounds/misc/rampage.wav"),
+            "unstoppable": pygame.mixer.Sound("resources/sounds/misc/unstoppable.wav"),
+            "wicked_sick": pygame.mixer.Sound("resources/sounds/misc/wickedsick.wav"),
+            "oneandonly": pygame.mixer.Sound("resources/sounds/misc/oneandonly.wav"),
+            "prepare": pygame.mixer.Sound("resources/sounds/misc/prepare.wav"),
+            "firstblood": pygame.mixer.Sound("resources/sounds/misc/firstblood.wav"),
+            "tap": pygame.mixer.Sound("resources/sounds/misc/tap.wav"),
+            "gogamble": pygame.mixer.Sound("resources/sounds/misc/gogamble.wav"),
+            "dangit": pygame.mixer.Sound("resources/sounds/misc/dangit.wav"),
+            "jackpot": pygame.mixer.Sound("resources/sounds/misc/jackpot.wav"),
+            "coinhandle": pygame.mixer.Sound("resources/sounds/misc/coinhandle.wav"),
+        }
+        self.volume = 0.01
+        self.set_volume(self.volume)
 
-S = [
-    [".....", ".....", "..00.", ".00..", "....."],
-    [".....", "..0..", "..00.", "...0.", "....."],
-]
+    def play_sound(self, name):
+        if name in self.sounds:
+            self.sounds[name].play()
 
-Z = [
-    [".....", ".....", ".00..", "..00.", "....."],
-    [".....", "..0..", ".00..", ".0...", "....."],
-]
+    def set_volume(self, vol):
+        self.volume = max(0.0, min(1.0, vol))
+        for sound in self.sounds.values():
+            sound.set_volume(self.volume)
+        pygame.mixer.music.set_volume(self.volume)
 
-I = [
-    ["..0..", "..0..", "..0..", "..0..", "....."],
-    [".....", "0000.", ".....", ".....", "....."],
-]
-
-O = [[".....", ".....", ".00..", ".00..", "....."]]
-
-J = [
-    [".....", ".0...", ".000.", ".....", "....."],
-    [".....", "..00.", "..0..", "..0..", "....."],
-    [".....", ".....", ".000.", "...0.", "....."],
-    [".....", "..0..", "..0..", ".00..", "....."],
-]
-
-L = [
-    [".....", "...0.", ".000.", ".....", "....."],
-    [".....", "..0..", "..0..", "..00.", "....."],
-    [".....", ".....", ".000.", ".0...", "....."],
-    [".....", ".00..", "..0..", "..0..", "....."],
-]
-
-T = [
-    [".....", "..0..", ".000.", ".....", "....."],
-    [".....", "..0..", "..00.", "..0..", "....."],
-    [".....", ".....", ".000.", "..0..", "....."],
-    [".....", "..0..", ".00..", "..0..", "....."],
-]
-
-shapes = [S, Z, I, O, J, L, T]
-shape_colors = [
-    (0, 255, 0),
-    (255, 0, 0),
-    (0, 255, 255),
-    (255, 255, 0),
-    (255, 165, 0),
-    (0, 0, 255),
-    (128, 0, 128),
-]
-# index 0 - 6 represent shape
+    def get_font(self, name, size, bold=False, italic=False):
+        return pygame.font.SysFont(name, size, bold=bold, italic=italic)
 
 
-class Piece(object):
-    rows = 20  # y
-    columns = 10  # x
-
-    def __init__(self, column, row, shape):
+# --- Piece Class ---
+class Piece:
+    def __init__(self, column, row, shape_format):
         self.x = column
         self.y = row
-        self.shape = shape
-        self.color = shape_colors[shapes.index(shape)]
-        self.rotation = 0  # number from 0-3
-
-
-def create_grid(locked_positions={}):
-    grid = [[(0, 0, 0) for x in range(10)] for x in range(20)]
-
-    for i in range(len(grid)):
-        for j in range(len(grid[i])):
-            if (j, i) in locked_positions:
-                c = locked_positions[(j, i)]
-                grid[i][j] = c
-    return grid
-
-
-def convert_shape_format(shape):
-    positions = []
-    format = shape.shape[shape.rotation % len(shape.shape)]
-
-    for i, line in enumerate(format):
-        row = list(line)
-        for j, column in enumerate(row):
-            if column == "0":
-                positions.append((shape.x + j, shape.y + i))
-
-    for i, pos in enumerate(positions):
-        positions[i] = (pos[0] - 2, pos[1] - 4)
-
-    return positions
-
-
-def valid_space(shape, grid):
-    accepted_positions = [
-        [(j, i) for j in range(10) if grid[i][j] == (0, 0, 0)] for i in range(20)
-    ]
-    accepted_positions = [j for sub in accepted_positions for j in sub]
-    formatted = convert_shape_format(shape)
-
-    for pos in formatted:
-        if pos not in accepted_positions:
-            if pos[1] > -1:
-                return False
-
-    return True
-
-
-def check_lost(positions):
-    for pos in positions:
-        x, y = pos
-        if y < 1:
-
-            return True
-    return False
-
-
-def get_shape():
-    global shapes, shape_colors
-
-    return Piece(5, 0, random.choice(shapes))
-
-
-def draw_text_middle(text, size, color, surface):
-    font = pygame.font.SysFont("comicsans", size, bold=True)
-    label = font.render(text, 1, color)
-
-    surface.blit(
-        label,
-        (
-            top_left_x + play_width / 2 - (label.get_width() / 2),
-            top_left_y + play_height / 2 - label.get_height() / 2,
-        ),
-    )
-
-
-def game_statistics(score, lines_cleared, survival_time):
-    run = True
-    win.fill((0, 0, 0))
-
-    # Statistics display
-    title_font = pygame.font.SysFont("impact", 60)
-    stats_font = pygame.font.SysFont("comicsans", 40)
-
-    title_text = title_font.render("GAME OVER", 1, (255, 0, 0))
-    time_text = stats_font.render(
-        f"Survival Time: {survival_time:.1f}s", 1, (255, 255, 255)
-    )
-    lines_text = stats_font.render(
-        f"Lines Cleared: {lines_cleared}", 1, (255, 255, 255)
-    )
-    score_text = stats_font.render(f"Final Score: {score}", 1, (255, 255, 255))
-    slot_text = stats_font.render("Try Your Luck! Triple your score?", 1, (255, 215, 0))
-
-    win.blit(title_text, (s_width // 2 - title_text.get_width() // 2, 100))
-    win.blit(time_text, (s_width // 2 - time_text.get_width() // 2, 200))
-    win.blit(lines_text, (s_width // 2 - lines_text.get_width() // 2, 250))
-    win.blit(score_text, (s_width // 2 - score_text.get_width() // 2, 300))
-    win.blit(slot_text, (s_width // 2 - slot_text.get_width() // 2, 400))
-
-    # Button to play slot machine
-    button_font = pygame.font.SysFont("comicsans", 30)
-    slot_button = button_font.render("SPIN THE SLOTS!", 1, (255, 255, 255))
-    exit_button = button_font.render("EXIT GAME", 1, (255, 255, 255))
-
-    slot_button_rect = pygame.Rect(s_width // 2 - 150, 450, 300, 50)
-    exit_button_rect = pygame.Rect(s_width // 2 - 150, 520, 300, 50)
-
-    pygame.draw.rect(win, (0, 128, 0), slot_button_rect)
-    pygame.draw.rect(win, (128, 0, 0), exit_button_rect)
-
-    win.blit(
-        slot_button,
-        (
-            slot_button_rect.x
-            + slot_button_rect.width // 2
-            - slot_button.get_width() // 2,
-            slot_button_rect.y
-            + slot_button_rect.height // 2
-            - slot_button.get_height() // 2,
-        ),
-    )
-    win.blit(
-        exit_button,
-        (
-            exit_button_rect.x
-            + exit_button_rect.width // 2
-            - exit_button.get_width() // 2,
-            exit_button_rect.y
-            + exit_button_rect.height // 2
-            - exit_button.get_height() // 2,
-        ),
-    )
-
-    pygame.display.update()
-
-    while run:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                quit()
-            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                mouse_pos = pygame.mouse.get_pos()
-                if slot_button_rect.collidepoint(mouse_pos):
-                    return play_slot_machine(score)
-                if exit_button_rect.collidepoint(mouse_pos):
-                    return score
-
-    return score
-
-
-def play_slot_machine(score):
-    # Slot machine symbols and odds
-    symbols = ["🍒", "🍊", "🍋", "🍇", "💎", "7️⃣"]
-    slot_values = {
-        "🍒": 0,  # Loss
-        "🍊": 1,  # Keep score
-        "🍋": 1.5,  # 1.5x multiplier
-        "🍇": 4,  # 4x multiplier
-        "💎": 25,  # 25x multiplier
-        "7️⃣": 100,  # 100x multiplier
-    }
-
-    # Probabilities (weighted selection)
-    weights = [40, 30, 15, 10, 4, 1]
-
-    run = True
-    spinning = False
-    result = None
-    spin_start_time = 0
-    spin_duration = 1000
-    slots = [random.choices(symbols, weights)[0] for _ in range(3)]
-
-    spin_sound_playing = False
-
-    # Cheat button variables
-    cheat_clicks = 0
-    cheat_activated = True
-
-    bet_amount = 100
-    bet_options = [100, 200, 500, 1000]
-
-    font = pygame.font.SysFont("segoe ui symbol", 80)  # Font that supports emoji
-    title_font = pygame.font.SysFont("impact", 40)
-    button_font = pygame.font.SysFont("comicsans", 30)
-
-    gogamble_sound.play()
-
-    while run:
-        win.fill((0, 0, 0))
-
-        # Draw title
-        title_text = title_font.render("TETRIS SLOT MACHINE", 1, (255, 215, 0))
-        win.blit(title_text, (s_width // 2 - title_text.get_width() // 2, 100))
-
-        # Draw score
-        score_font = pygame.font.SysFont("comicsans", 30)
-        score_text = score_font.render(f"Current Score: {score}", 1, (255, 255, 255))
-        win.blit(score_text, (s_width // 2 - score_text.get_width() // 2, 160))
-
-        # Draw slot machine
-        slot_rect = pygame.Rect(s_width // 2 - 200, 220, 400, 150)
-        pygame.draw.rect(win, (50, 50, 50), slot_rect)
-        pygame.draw.rect(win, (150, 150, 150), slot_rect, 5)
-
-        # Draw slots
-        current_time = pygame.time.get_ticks()
-        if spinning and current_time - spin_start_time < spin_duration:
-            # Play spinning sound once when spin starts
-            if not spin_sound_playing:
-                coinhandle_sound.play()
-                spin_sound_playing = True
-
-            # Animate spinning
-            if current_time % 100 < 50:  # Change symbols every 100ms
-                slots = [random.choices(symbols, weights)[0] for _ in range(3)]
-        elif spinning:
-
-            # Spinning finished, determine result
-            spinning = False
-            old_score = score
-
-            # If cheat was activated, ensure a jackpot
-            if cheat_activated:
-                # Force 3 diamonds for a 3x multiplier
-                slots = ["7️⃣", "7️⃣", "7️⃣"]
-                cheat_activated = False
-
-            # Determine outcome based on symbols
-            if slots[0] == slots[1] == slots[2]:  # All three match
-                multiplier = slot_values[slots[0]]
-                new_score = score + int(bet_amount * multiplier)
-                sounds = [
-                    rampage_sound,
-                    godlike_sound,
-                    holyshit_sound,
-                    unstoppable_sound,
-                ]
-                if multiplier > 1:
-                    result = f"JACKPOT! {multiplier}x MULTIPLIER!"
-                    jackpot_sound.play()
-                    random.choice(sounds).play()
-                elif multiplier == 1:
-
-                    result = "Got your score back!"
-                    random.choice(sounds).play()
-                else:
-
-                    result = "You lost everything!"
-
-                score = new_score
-            else:
-                # Find the most common symbol
-                from collections import Counter
-
-                symbol_counts = Counter(slots)
-                most_common = symbol_counts.most_common(1)[0][0]
-                count = symbol_counts[most_common]
-
-                if count == 2:  # Two of the same
-                    multiplier = slot_values[most_common] * 0.5  # Half the multiplier
-                    new_score = score + int(bet_amount * multiplier)
-                    if multiplier >= 1:
-                        jackpot_sound.play()
-                        result = f"Two matches! {multiplier}x your betS!"
-                    else:
-                        dangit_sound.play()
-                        result = "You lost half your bet!"
-                    score = new_score
-                else:
-                    dangit_sound.play()
-                    result = "No matches. Try again?"  # Lose 20% on no match
-
-        # Draw slot symbols
-        for i, symbol in enumerate(slots):
-            symbol_text = font.render(symbol, 1, (255, 255, 255))
-            win.blit(
-                symbol_text,
-                (
-                    slot_rect.x + 70 + i * 120 - symbol_text.get_width() // 2,
-                    slot_rect.y + slot_rect.height // 2 - symbol_text.get_height() // 2,
-                ),
-            )
-
-        # Draw result
-        if result:
-            result_font = pygame.font.SysFont("comicsans", 35)
-            result_text = result_font.render(result, 1, (255, 215, 0))
-            win.blit(result_text, (s_width // 2 - result_text.get_width() // 2, 390))
-
-            new_score_text = result_font.render(
-                f"New Score: {score}", 1, (255, 255, 255)
-            )
-            win.blit(
-                new_score_text, (s_width // 2 - new_score_text.get_width() // 2, 430)
-            )
-
-        # Draw buttons
-        button_font = pygame.font.SysFont("comicsans", 30)
-
-        spin_button_text = button_font.render("SPIN AGAIN", 1, (255, 255, 255))
-        exit_button_text = button_font.render("TAKE SCORE & EXIT", 1, (255, 255, 255))
-        cheat_button_text = button_font.render("LUCKY SPIN", 1, (255, 255, 255))
-        deposit_button_text = button_font.render("DEPOSIT +1000", 1, (255, 255, 255))
-
-        # Cheat button
-        cheat_button_rect = pygame.Rect(50, 480, 180, 50)
-
-        deposit_button_rect = pygame.Rect(570, 480, 180, 50)
-
-        spin_button_rect = pygame.Rect(s_width // 2 - 150, 480, 300, 50)
-        exit_button_rect = pygame.Rect(s_width // 2 - 150, 625, 300, 50)
-
-        if not spinning:
-            pygame.draw.rect(win, (0, 128, 0), spin_button_rect)
-            win.blit(
-                spin_button_text,
-                (
-                    spin_button_rect.x
-                    + spin_button_rect.width // 2
-                    - spin_button_text.get_width() // 2,
-                    spin_button_rect.y
-                    + spin_button_rect.height // 2
-                    - spin_button_text.get_height() // 2,
-                ),
-            )
-            # Draw cheat button (only when not spinning)
-            pygame.draw.rect(
-                win, (128, 0, 128), cheat_button_rect
-            )  # Purple for the cheat button
-            win.blit(
-                cheat_button_text,
-                (
-                    cheat_button_rect.x
-                    + cheat_button_rect.width // 2
-                    - cheat_button_text.get_width() // 2,
-                    cheat_button_rect.y
-                    + cheat_button_rect.height // 2
-                    - cheat_button_text.get_height() // 2,
-                ),
-            )
-
-            # Draw deposit button
-            pygame.draw.rect(win, (0, 128, 128), deposit_button_rect)
-            win.blit(
-                deposit_button_text,
-                (
-                    deposit_button_rect.x
-                    + deposit_button_rect.width // 2
-                    - deposit_button_text.get_width() // 2,
-                    deposit_button_rect.y
-                    + deposit_button_rect.height // 2
-                    - deposit_button_text.get_height() // 2,
-                ),
-            )
-
-            # Draw bet amount buttons
-            for i, bet in enumerate(bet_options):
-                bet_button_rect = pygame.Rect(50 + i * 150, 550, 100, 50)
-                pygame.draw.rect(win, (128, 128, 0), bet_button_rect)
-                bet_text = button_font.render(f"BET {bet}", 1, (255, 255, 255))
-                win.blit(
-                    bet_text,
-                    (
-                        bet_button_rect.x
-                        + bet_button_rect.width // 2
-                        - bet_text.get_width() // 2,
-                        bet_button_rect.y
-                        + bet_button_rect.height // 2
-                        - bet_text.get_height() // 2,
-                    ),
-                )
-
-            # If cheat was activated, ensure a jackpot
-            if cheat_activated:
-                # Force 3 diamonds for a 3x multiplier
-                score += 1000
-                slots = ["💎", "💎", "💎"]
-                cheat_activated = False
-
-        pygame.draw.rect(win, (128, 0, 0), exit_button_rect)
-        win.blit(
-            exit_button_text,
-            (
-                exit_button_rect.x
-                + exit_button_rect.width // 2
-                - exit_button_text.get_width() // 2,
-                exit_button_rect.y
-                + exit_button_rect.height // 2
-                - exit_button_text.get_height() // 2,
-            ),
-        )
-
-        pygame.display.update()
-
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                quit()
+        self.shape_format = shape_format
+        self.color = Config.SHAPE_COLORS[Config.SHAPES.index(shape_format)]
+        self.rotation = 0
+
+    def get_current_shape_matrix(self):
+        return self.shape_format[self.rotation % len(self.shape_format)]
+
+
+# --- Game Logic (Grid, Validation, etc.) ---
+class GameLogic:
+    def __init__(self):
+        self.grid = self._create_empty_grid()
+        self.locked_positions = {}
+
+    def _create_empty_grid(self):
+        return [
+            [(0, 0, 0) for _ in range(Config.GRID_COLS)]
+            for _ in range(Config.GRID_ROWS)
+        ]
+
+    def update_grid_from_locked(self):
+        self.grid = self._create_empty_grid()
+        for (c, r), color in self.locked_positions.items():
+            if 0 <= r < Config.GRID_ROWS and 0 <= c < Config.GRID_COLS:
+                self.grid[r][c] = color
+        return self.grid
+
+    def convert_shape_format(self, piece):
+        positions = []
+        shape_matrix = piece.get_current_shape_matrix()
+        for i, line in enumerate(shape_matrix):
+            for j, column_char in enumerate(list(line)):
+                if column_char == "0":
+                    positions.append((piece.x + j, piece.y + i))
+        return [(pos[0] - 2, pos[1] - 4) for pos in positions]
+
+    def valid_space(self, piece):
+        formatted_shape = self.convert_shape_format(piece)
+        for x, y in formatted_shape:
+            if not (0 <= x < Config.GRID_COLS and 0 <= y < Config.GRID_ROWS):
+                if (
+                    y >= Config.GRID_ROWS
+                ):  # Check if only out of bounds due to being too low
+                    return False  # Invalid if below playfield
+                if (
+                    x < 0 or x >= Config.GRID_COLS
+                ):  # Invalid if horizontally out of bounds
+                    return False
+                # Allow pieces to be above the screen (y < 0)
             if (
-                event.type == pygame.MOUSEBUTTONDOWN
-                and event.button == 1
-                and not spinning
-            ):
-                mouse_pos = pygame.mouse.get_pos()
-                if spin_button_rect.collidepoint(mouse_pos):
-                    if score >= bet_amount:
-                        score -= bet_amount
-                        spinning = True
-                        spin_start_time = current_time
-                        slots = [random.choices(symbols, weights)[0] for _ in range(3)]
-                        result = None
-                        tap_sound.play()
-                    else:
-                        result = "Not enough points to spin!"
-                if exit_button_rect.collidepoint(mouse_pos):
-                    return score
-                elif cheat_button_rect.collidepoint(mouse_pos) and not spinning:
-                    cheat_activated = True
-                    spinning = True
-                    spin_start_time = current_time
-                    result = None
-                elif deposit_button_rect.collidepoint(mouse_pos):
-                    score += 1000
-                    result = "DEPOSIT ADDED! +1000 POINTS!"
-                    coinhandle_sound.play()
-                else:
-                    for i, bet in enumerate(bet_options):
-                        bet_button_rect = pygame.Rect(50 + i * 150, 550, 100, 50)
-                        if bet_button_rect.collidepoint(mouse_pos):
-                            bet_amount = bet
-                            result = f"Bet amount set to {bet} points"
-                            tap_sound.play()
+                y >= 0 and (x, y) in self.locked_positions
+            ):  # Check collision with locked pieces only if inside grid
+                return False
+        return True
 
-    return score
+    def check_lost(self):
+        for _, y in self.locked_positions:
+            if y < 1:
+                return True
+        return False
+
+    def clear_rows(self):
+        rows_cleared_count = 0
+        # Iterate from bottom to top
+        for r in range(Config.GRID_ROWS - 1, -1, -1):
+            is_row_full = True
+            for c in range(Config.GRID_COLS):
+                if (c, r) not in self.locked_positions:
+                    is_row_full = False
+                    break
+
+            if is_row_full:
+                rows_cleared_count += 1
+                # Remove the full row
+                for c in range(Config.GRID_COLS):
+                    del self.locked_positions[(c, r)]
+                # Shift all rows above it down
+                for sr in range(r - 1, -1, -1):  # Shifted rows from r-1 down to 0
+                    for sc in range(Config.GRID_COLS):
+                        if (sc, sr) in self.locked_positions:
+                            color = self.locked_positions.pop((sc, sr))
+                            self.locked_positions[(sc, sr + 1)] = color
+
+        if rows_cleared_count > 0:
+            self.update_grid_from_locked()
+        return rows_cleared_count
+
+    def lock_piece(self, piece):
+        shape_pos = self.convert_shape_format(piece)
+        for pos in shape_pos:
+            self.locked_positions[pos] = piece.color
+        self.update_grid_from_locked()
+
+    def get_random_piece(self):
+        return Piece(Config.GRID_COLS // 2, 1, random.choice(Config.SHAPES))
 
 
-def create_popup(text, size=75, color=(255, 0, 0), duration=2000):
-    """Creates a popup message with better visibility and blood-like effect"""
-    # Create main text with a bold impact font
-    font = pygame.font.SysFont("impact", size, bold=True)
-    label = font.render(text, True, color)
+# --- Renderer ---
+class Renderer:
+    def __init__(self, surface, asset_manager):
+        self.surface = surface
+        self.assets = asset_manager
 
-    # Create a glow effect surface (slightly larger)
-    glow_size = int(size * 1.05)
-    glow_font = pygame.font.SysFont("impact", glow_size, bold=True)
-    glow = glow_font.render(
+    def draw_text(
+        self,
         text,
-        True,
-        (min(color[0] + 50, 255), min(color[1] + 20, 255), min(color[2] + 20, 255)),
-    )
+        size,
+        color,
+        x,
+        y,
+        font_name="comicsans",
+        center_x=False,
+        center_y=False,
+        bold=False,
+    ):
+        font = self.assets.get_font(font_name, size, bold=bold)
+        label = font.render(text, 1, color)
+        text_width, text_height = label.get_size()
+        if center_x:
+            x -= text_width // 2
+        if center_y:
+            y -= text_height // 2
+        self.surface.blit(label, (x, y))
 
-    return {
-        "surface": label,
-        "glow": glow,
-        "position": (s_width // 2 - label.get_width() // 2, s_height // 2 - 100),
-        "start_time": pygame.time.get_ticks(),
-        "duration": duration,
-        "scale": 0.1,  # Start small, grow larger
-        "alpha": 255,  # Full opacity
-    }
-
-
-def draw_popups(surface, popups):
-    """Draws popups with enhanced visibility and effects"""
-    current_time = pygame.time.get_ticks()
-    completed = []
-
-    for i, popup in enumerate(popups):
-        elapsed = current_time - popup["start_time"]
-
-        # Remove expired popups
-        if elapsed > popup["duration"]:
-            completed.append(i)
-            continue
-
-        # Calculate animation progress (0.0 to 1.0)
-        progress = elapsed / popup["duration"]
-
-        # More dynamic scaling effect
-        if progress < 0.15:
-            # Rapid grow
-            scale = min(1.2, popup["scale"] + progress * 7.5)
-        elif progress < 0.3:
-            # Slightly shrink back
-            scale = max(1.0, 1.2 - (progress - 0.15) * 1.3)
-        else:
-            # Pulsate slightly
-            scale = 1.0 + 0.05 * abs(math.sin(progress * 6))
-
-        # Alpha effect (fade out at the end)
-        if progress > 0.7:
-            alpha = int(popup["alpha"] * (1 - (progress - 0.7) / 0.3))
-        else:
-            alpha = popup["alpha"]
-
-        # Create scaled copies with current scale
-        scaled_surface = pygame.transform.scale(
-            popup["surface"],
-            (
-                int(popup["surface"].get_width() * scale),
-                int(popup["surface"].get_height() * scale),
-            ),
+    def draw_text_middle(
+        self, text, size, color, font_name="comicsans", bold=True, y_offset=0
+    ):
+        x = Config.TOP_LEFT_X + Config.PLAY_WIDTH / 2
+        y = Config.TOP_LEFT_Y + Config.PLAY_HEIGHT / 2 + y_offset
+        self.draw_text(
+            text, size, color, x, y, font_name, center_x=True, center_y=True, bold=bold
         )
 
-        scaled_glow = pygame.transform.scale(
-            popup["glow"],
-            (
-                int(popup["glow"].get_width() * scale * 1.05),
-                int(popup["glow"].get_height() * scale * 1.05),
-            ),
-        )
-
-        # Apply alpha
-        scaled_surface.set_alpha(alpha)
-        scaled_glow.set_alpha(int(alpha * 0.7))
-
-        # Position (centered)
-        pos_x = (
-            popup["position"][0]
-            - (scaled_surface.get_width() - popup["surface"].get_width()) // 2
-        )
-        pos_y = (
-            popup["position"][1]
-            - (scaled_surface.get_height() - popup["surface"].get_height()) // 2
-        )
-        glow_x = pos_x - (scaled_glow.get_width() - scaled_surface.get_width()) // 2
-        glow_y = pos_y - (scaled_glow.get_height() - scaled_surface.get_height()) // 2
-
-        # Draw multi-layered shadow for "bloody" effect - offset in different directions
-        for offset in [(4, 4), (3, 5), (5, 3), (2, 6)]:
-            shadow = scaled_surface.copy()
-            shadow_alpha = min(255, int(alpha * (0.5 - offset[0] * 0.05)))
-            shadow.fill((10, 0, 0, shadow_alpha), None, pygame.BLEND_RGBA_MULT)
-            surface.blit(shadow, (pos_x + offset[0], pos_y + offset[1]))
-
-        # Draw glow effect first
-        surface.blit(scaled_glow, (glow_x, glow_y))
-
-        # Draw the actual text on top
-        surface.blit(scaled_surface, (pos_x, pos_y))
-
-    # Remove completed popups (in reverse order to avoid index issues)
-    for i in sorted(completed, reverse=True):
-        popups.pop(i)
-
-
-def draw_grid(surface, row, col):
-    sx = top_left_x
-    sy = top_left_y
-    for i in range(row):
-        pygame.draw.line(
-            surface, (128, 128, 128), (sx, sy + i * 30), (sx + play_width, sy + i * 30)
-        )  # horizontal lines
-        for j in range(col):
+    def draw_grid_lines(self):
+        sx, sy = Config.TOP_LEFT_X, Config.TOP_LEFT_Y
+        for i in range(Config.GRID_ROWS + 1):
             pygame.draw.line(
-                surface,
+                self.surface,
                 (128, 128, 128),
-                (sx + j * 30, sy),
-                (sx + j * 30, sy + play_height),
-            )  # vertical lines
-
-
-def draw_score(surface, score):
-    font = pygame.font.SysFont("comicsans", 30)
-    label = font.render(f"Score: {score}", 1, (255, 255, 255))
-
-    # Position the score below the "Tetris" title
-    sx = top_left_x - 190
-    sy = top_left_y + 200
-
-    surface.blit(label, (sx, sy))
-
-
-def clear_rows(grid, locked):
-    # need to see if row is clear the shift every other row above down one
-    inc = 0
-    for i in range(len(grid) - 1, -1, -1):
-        row = grid[i]
-        if (0, 0, 0) not in row:
-            inc += 1
-            # add positions to remove from locked
-            ind = i
-            for j in range(len(row)):
-                try:
-                    del locked[(j, i)]
-                except:
-                    continue
-    if inc > 0:
-        for key in sorted(list(locked), key=lambda x: x[1])[::-1]:
-            x, y = key
-            if y < ind:
-                newKey = (x, y + inc)
-                locked[newKey] = locked.pop(key)
-
-    return inc
-
-
-def draw_next_shape(shape, surface):
-    font = pygame.font.SysFont("comicsans", 30)
-    label = font.render("Next Shape", 1, (255, 255, 255))
-
-    sx = top_left_x + play_width + 50
-    sy = top_left_y + play_height / 2 - 100
-    format = shape.shape[shape.rotation % len(shape.shape)]
-
-    for i, line in enumerate(format):
-        row = list(line)
-        for j, column in enumerate(row):
-            if column == "0":
-                pygame.draw.rect(
-                    surface, shape.color, (sx + j * 30, sy + i * 30, 30, 30), 0
-                )
-
-    surface.blit(label, (sx + 10, sy - 30))
-
-
-def draw_held_shape(held_piece, surface):
-    # Render the held piece next to the playfield, similar to draw_next_shape logic
-    if held_piece:
-        font = pygame.font.SysFont("comicsans", 30)
-        label = font.render("Held", 1, (255, 255, 255))
-        sx = top_left_x + play_width + 50
-        sy = top_left_y + play_height / 2 - 100 + 200
-        surface.blit(label, (sx + 10, sy - 30))
-        held_format = held_piece.shape[held_piece.rotation % len(held_piece.shape)]
-        for i, line in enumerate(held_format):
-            for j, column in enumerate(line):
-                if column == "0":
-                    pygame.draw.rect(
-                        surface, held_piece.color, (sx + j * 30, sy + i * 30, 30, 30), 0
-                    )
-
-
-def draw_window(surface, score=0):
-    surface.fill((0, 0, 0))
-    # Tetris Title
-    font = pygame.font.SysFont("comicsans", 60)
-    label = font.render("TETRIS", 1, (255, 255, 255))
-
-    surface.blit(label, (top_left_x + play_width / 2 - (label.get_width() / 2), 30))
-
-    draw_score(surface, score)
-
-    for i in range(len(grid)):
-        for j in range(len(grid[i])):
-            pygame.draw.rect(
-                surface,
-                grid[i][j],
-                (top_left_x + j * 30, top_left_y + i * 30, 30, 30),
-                0,
+                (sx, sy + i * Config.BLOCK_SIZE),
+                (sx + Config.PLAY_WIDTH, sy + i * Config.BLOCK_SIZE),
+            )
+        for j in range(Config.GRID_COLS + 1):
+            pygame.draw.line(
+                self.surface,
+                (128, 128, 128),
+                (sx + j * Config.BLOCK_SIZE, sy),
+                (sx + j * Config.BLOCK_SIZE, sy + Config.PLAY_HEIGHT),
             )
 
-    # draw grid and border
-    draw_grid(surface, 20, 10)
-    pygame.draw.rect(
-        surface, (255, 0, 0), (top_left_x, top_left_y, play_width, play_height), 5
-    )
-    # pygame.display.update()
-
-
-held_piece = None
-can_hold = True
-
-
-def main():
-    global grid
-    global held_piece, can_hold
-
-    # Add a list to store active popups
-    active_popups = []
-
-    pause_screen = pygame.display.set_mode((800, 700))
-
-    locked_positions = {}  # (x,y):(255,0,0)
-    grid = create_grid(locked_positions)
-
-    change_piece = False
-    run = True
-    current_piece = get_shape()
-    next_piece = get_shape()
-    clock = pygame.time.Clock()
-    fall_time = 0
-    level_time = 0
-    fall_speed = 0.27
-    score = 0
-    first_piece = True
-
-    # Track statistics
-    start_time = pygame.time.get_ticks()
-    total_lines_cleared = 0
-
-    while run:
-
-        grid = create_grid(locked_positions)
-        fall_time += clock.get_rawtime()
-        level_time += clock.get_rawtime()
-        clock.tick()
-
-        if level_time / 1000 > 4:
-            level_time = 0
-            if fall_speed > 0.15:
-                fall_speed -= 0.005
-
-        # PIECE FALLING CODE
-        if fall_time / 1000 >= fall_speed:
-            fall_time = 0
-            current_piece.y += 1
-            if not (valid_space(current_piece, grid)) and current_piece.y > 0:
-                current_piece.y -= 1
-                change_piece = True
-
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                run = False
-                pygame.display.quit()
-                quit()
-
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_LEFT:
-                    current_piece.x -= 1
-                    if not valid_space(current_piece, grid):
-                        current_piece.x += 1
-                if event.key == pygame.K_ESCAPE:
-                    action = pause_menu(pause_screen)
-                    if action == "resume":
-                        pass
-                    elif action == "new_game":
-                        main()
-                        return
-                    elif action == "exit":
-                        run = False
-                        pygame.display.quit()
-                        quit()
-                elif event.key in [pygame.K_LSHIFT, pygame.K_RSHIFT]:
-                    if can_hold:
-                        if held_piece == None:
-                            held_piece = current_piece
-                            current_piece = next_piece
-                            next_piece = get_shape()
-                            can_hold = False
-                        else:
-                            held_piece, current_piece = current_piece, held_piece
-                            held_piece.x = 5
-                            held_piece.y = 0
-                            can_hold = False
-                elif event.key == pygame.K_RIGHT:
-                    current_piece.x += 1
-                    if not valid_space(current_piece, grid):
-                        current_piece.x -= 1
-                elif event.key == pygame.K_UP:
-                    # rotate shape
-                    current_piece.rotation = current_piece.rotation + 1 % len(
-                        current_piece.shape
+    def draw_playfield_blocks(self, grid_data):
+        for r, row_data in enumerate(grid_data):
+            for c, color in enumerate(row_data):
+                if color != (0, 0, 0):  # Only draw non-empty blocks
+                    pygame.draw.rect(
+                        self.surface,
+                        color,
+                        (
+                            Config.TOP_LEFT_X + c * Config.BLOCK_SIZE,
+                            Config.TOP_LEFT_Y + r * Config.BLOCK_SIZE,
+                            Config.BLOCK_SIZE,
+                            Config.BLOCK_SIZE,
+                        ),
+                        0,
                     )
-                    if not valid_space(current_piece, grid):
-                        current_piece.rotation = current_piece.rotation - 1 % len(
-                            current_piece.shape
-                        )
 
-                if event.key == pygame.K_DOWN:
-                    # move shape down
-                    current_piece.y += 1
-                    if not valid_space(current_piece, grid):
-                        current_piece.y -= 1
-
-                if event.key == pygame.K_SPACE:
-                    while valid_space(current_piece, grid):
-                        current_piece.y += 1
-                    current_piece.y -= 1
-                    print(convert_shape_format(current_piece))  # todo fix
-
-        shape_pos = convert_shape_format(current_piece)
-
-        # add piece to the grid for drawing
-        for i in range(len(shape_pos)):
-            x, y = shape_pos[i]
+    def draw_piece(self, piece, game_logic):
+        if not piece:
+            return
+        shape_pos = game_logic.convert_shape_format(piece)
+        for x, y in shape_pos:
             if y > -1:
-                grid[y][x] = current_piece.color
+                # Only draw pieces that are within the visible grid
+                pygame.draw.rect(
+                    self.surface,
+                    piece.color,
+                    (
+                        Config.TOP_LEFT_X + x * Config.BLOCK_SIZE,
+                        Config.TOP_LEFT_Y + y * Config.BLOCK_SIZE,
+                        Config.BLOCK_SIZE,
+                        Config.BLOCK_SIZE,
+                    ),
+                    0,
+                )
 
-        # IF PIECE HIT GROUND
-        if change_piece:
-            for pos in shape_pos:
-                p = (pos[0], pos[1])
-                locked_positions[p] = current_piece.color
-            current_piece = next_piece
-            next_piece = get_shape()
-            change_piece = False
-            can_hold = True
-            tap_sound.play()
-            if first_piece:
-                firstblood_sound.play()
-                active_popups.append(create_popup("FIRST BLOOD!", color=(220, 20, 60)))
-                first_piece = False
-
-            # call four times to check for multiple clear rows
-            lines_cleared = clear_rows(grid, locked_positions)
-            total_lines_cleared += lines_cleared
-            if lines_cleared > 0:
-                # Score calculation based on lines cleared
-                if lines_cleared == 1:
-                    score += 100
-                    humiliation_sound.play()
-                    active_popups.append(
-                        create_popup("HUMILIATION!", color=(255, 100, 100))
+    def _draw_side_panel_piece(self, piece, title, base_sx, base_sy):
+        if not piece:
+            return
+        self.draw_text(title, 30, (255, 255, 255), base_sx + 10, base_sy - 30)
+        shape_matrix = piece.get_current_shape_matrix()
+        for i, line in enumerate(shape_matrix):
+            for j, column_char in enumerate(list(line)):
+                if column_char == "0":
+                    pygame.draw.rect(
+                        self.surface,
+                        piece.color,
+                        (
+                            base_sx
+                            + (j - 0) * Config.BLOCK_SIZE,  # Adjusted for 5x5 matrix
+                            base_sy + (i - 0) * Config.BLOCK_SIZE,
+                            Config.BLOCK_SIZE,
+                            Config.BLOCK_SIZE,
+                        ),
+                        0,
                     )
-                elif lines_cleared == 2:
-                    score += 300
-                    multi_kill_sound.play()
-                    active_popups.append(
-                        create_popup("MULTI KILL!", color=(255, 50, 50))
-                    )
-                elif lines_cleared == 3:
-                    score += 500
-                    mega_kill_sound.play()
-                    active_popups.append(
-                        create_popup("MEGA KILL!", color=(255, 20, 20))
-                    )
-                elif lines_cleared == 4:
-                    score += 800
-                    ultra_kill_sound.play()
-                    active_popups.append(create_popup("ULTRA KILL!", color=(200, 0, 0)))
-                pass
 
-        draw_window(win, score)
-        draw_next_shape(next_piece, win)
-        draw_held_shape(held_piece, win)
-        pygame.display.update()
+    def draw_next_shape(self, piece):
+        sx = Config.TOP_LEFT_X + Config.PLAY_WIDTH + 50
+        sy = Config.TOP_LEFT_Y + Config.PLAY_HEIGHT / 2 - 150  # Adjusted position
+        self._draw_side_panel_piece(piece, "Next Shape", sx, sy)
 
-        # Check if user lost
-        if check_lost(locked_positions):
-            run = False
-    survival_time = (pygame.time.get_ticks() - start_time) / 1000.0
+    def draw_held_shape(self, piece):
+        sx = Config.TOP_LEFT_X + Config.PLAY_WIDTH + 50
+        sy = Config.TOP_LEFT_Y + Config.PLAY_HEIGHT / 2 + 50  # Adjusted position
+        self._draw_side_panel_piece(piece, "Held", sx, sy)
 
-    draw_text_middle("You Lost", 40, (255, 255, 255), win)
-    oneandonly_sound.play()
-    pygame.display.update()
-    pygame.time.delay(2000)
+    def draw_score(self, score):
+        sx = Config.TOP_LEFT_X + Config.PLAY_WIDTH + 125  # Right panel
+        sy = Config.TOP_LEFT_Y + 30
+        self.draw_text(f"Score: {score}", 30, (255, 255, 255), sx, sy, center_x=True)
 
-    final_score = game_statistics(score, total_lines_cleared, survival_time)
-
-
-def main_menu():
-    run = True
-    global volume
-    dragging = False
-
-    # Slider dimensions
-    slider_x = 200
-    slider_y = 600
-    slider_width = 400
-    slider_height = 8
-    knob_radius = 15
-
-    set_all_sounds_volume(volume)
-
-    while run:
-        win.fill((0, 0, 0))
-        # Title text
-        title_font = pygame.font.SysFont("comicsans", 80)
-        title_label = title_font.render("TETRIS", 1, (255, 255, 255))
-        win.blit(title_label, (s_width / 2 - title_label.get_width() / 2, 150))
-
-        # Instructions text
-        # Instructions text
-        font = pygame.font.SysFont("comicsans", 40)
-        label1 = font.render("Are you ready to play?", 1, (255, 255, 255))
-        label2 = font.render("Press SPACE to start", 1, (255, 255, 255))
-        label3 = font.render("Press ESC to exit", 1, (255, 255, 255))
-
-        win.blit(label1, (s_width / 2 - label1.get_width() / 2, 300))
-        win.blit(label2, (s_width / 2 - label2.get_width() / 2, 360))
-        win.blit(label3, (s_width / 2 - label3.get_width() / 2, 420))
-
-        # Play a sound when menu first loads (optional)
-        if hasattr(main_menu, "first_run") and not main_menu.first_run:
-            main_menu.first_run = False
-            prepare_sound.play()
-
-        # Draw volume slider
+    def draw_main_tetris_window(
+        self, grid_data, score, current_piece, next_piece, held_piece, game_logic
+    ):
+        self.surface.fill((0, 0, 0))
+        self.draw_text(
+            "TETRIS", 60, (255, 255, 255), Config.S_WIDTH / 2, 30, center_x=True
+        )
+        self.draw_score(score)
+        self.draw_playfield_blocks(grid_data)
+        if current_piece:
+            self.draw_piece(current_piece, game_logic)
+        self.draw_grid_lines()
         pygame.draw.rect(
-            win, (180, 180, 180), (slider_x, slider_y, slider_width, slider_height)
+            self.surface,
+            (255, 0, 0),
+            (
+                Config.TOP_LEFT_X,
+                Config.TOP_LEFT_Y,
+                Config.PLAY_WIDTH,
+                Config.PLAY_HEIGHT,
+            ),
+            5,
         )
-        knob_x = int(slider_x + volume * slider_width)
-        pygame.draw.circle(
-            win, (255, 215, 0), (knob_x, slider_y + slider_height // 2), knob_radius
+        self.draw_next_shape(next_piece)
+        self.draw_held_shape(held_piece)
+
+
+# --- Popup Manager ---
+class PopupManager:
+    def __init__(self, renderer):
+        self.popups = []
+        self.renderer = renderer
+
+    def create_popup(self, text, size=75, color=(255, 0, 0), duration=2000):
+        font = self.renderer.assets.get_font("impact", size, bold=True)
+        label = font.render(text, True, color)
+        glow_size = int(size * 1.05)
+        glow_font = self.renderer.assets.get_font("impact", glow_size, bold=True)
+        glow_color = (
+            min(color[0] + 50, 255),
+            min(color[1] + 20, 255),
+            min(color[2] + 20, 255),
         )
-        # Volume label
-        vol_font = pygame.font.SysFont("comicsans", 24)
-        vol_label = vol_font.render(f"Volume: {int(volume*100)}%", 1, (255, 255, 255))
-        win.blit(vol_label, (slider_x + slider_width + 30, slider_y - 20))
+        glow_label = glow_font.render(text, True, glow_color)
+        popup_data = {
+            "surface": label,
+            "glow": glow_label,
+            "position": (
+                Config.S_WIDTH // 2 - label.get_width() // 2,
+                Config.S_HEIGHT // 2 - 100,
+            ),
+            "start_time": pygame.time.get_ticks(),
+            "duration": duration,
+            "scale": 0.1,
+            "alpha": 255,
+        }
+        self.popups.append(popup_data)
 
-        pygame.display.update()
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                run = False
+    def draw_popups(self, surface):
+        current_time = pygame.time.get_ticks()
+        self.popups = [
+            p for p in self.popups if current_time - p["start_time"] <= p["duration"]
+        ]
 
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_SPACE:
-                    main()
-                elif event.key == pygame.K_ESCAPE:
-                    run = False
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                mx, my = pygame.mouse.get_pos()
+        for popup in self.popups:
+            elapsed = current_time - popup["start_time"]
+            progress = elapsed / popup["duration"]
+            if progress < 0.15:
+                scale = min(1.2, popup["scale"] + progress * 7.5)
+            elif progress < 0.3:
+                scale = max(1.0, 1.2 - (progress - 0.15) * 1.3)
+            else:
+                scale = 1.0 + 0.05 * abs(math.sin(progress * 6 * math.pi))
+            alpha = (
+                int(popup["alpha"] * (1 - (progress - 0.7) / 0.3))
+                if progress > 0.7
+                else popup["alpha"]
+            )
+            alpha = max(0, min(255, alpha))
+
+            scaled_surface = pygame.transform.smoothscale(
+                popup["surface"],
+                (
+                    int(popup["surface"].get_width() * scale),
+                    int(popup["surface"].get_height() * scale),
+                ),
+            )
+            scaled_glow = pygame.transform.smoothscale(
+                popup["glow"],
+                (
+                    int(popup["glow"].get_width() * scale * 1.05),
+                    int(popup["glow"].get_height() * scale * 1.05),
+                ),
+            )
+            scaled_surface.set_alpha(alpha)
+            scaled_glow.set_alpha(int(alpha * 0.7))
+
+            pos_x = (
+                popup["position"][0]
+                - (scaled_surface.get_width() - popup["surface"].get_width()) // 2
+            )
+            pos_y = (
+                popup["position"][1]
+                - (scaled_surface.get_height() - popup["surface"].get_height()) // 2
+            )
+            glow_x = pos_x - (scaled_glow.get_width() - scaled_surface.get_width()) // 2
+            glow_y = (
+                pos_y - (scaled_glow.get_height() - scaled_surface.get_height()) // 2
+            )
+
+            for ox, oy in [(4, 4), (3, 5), (5, 3), (2, 6)]:
+                shadow = scaled_surface.copy()
+                shadow.fill(
+                    (10, 0, 0, min(255, int(alpha * (0.5 - ox * 0.05)))),
+                    None,
+                    pygame.BLEND_RGBA_MULT,
+                )
+                surface.blit(shadow, (pos_x + ox, pos_y + oy))
+            surface.blit(scaled_glow, (glow_x, glow_y))
+            surface.blit(scaled_surface, (pos_x, pos_y))
+
+
+# --- Slot Machine ---
+class SlotMachine:
+    def __init__(self, surface, renderer, asset_manager, initial_score):
+        self.surface = surface
+        self.renderer = renderer
+        self.assets = asset_manager
+        self.score = initial_score
+        self.symbols, self.slot_values, self.weights = (
+            Config.SLOT_SYMBOLS,
+            Config.SLOT_VALUES,
+            Config.SLOT_WEIGHTS,
+        )
+        self.spinning, self.result_message, self.spin_start_time = False, None, 0
+        self.spin_duration, self.slots_display = 1000, [
+            random.choices(self.symbols, self.weights)[0] for _ in range(3)
+        ]
+        self.spin_sound_playing, self.cheat_activated = False, False
+        self.bet_amount, self.bet_options = 100, [100, 200, 500, 1000]
+        self.slot_font = self.assets.get_font("segoe ui symbol", 80)  # Cache font
+
+    def _handle_spin_result(self):
+        self.spinning, self.spin_sound_playing = False, False
+        if self.cheat_activated:
+            self.slots_display, self.cheat_activated = ["7️⃣", "7️⃣", "7️⃣"], False
+
+        if self.slots_display[0] == self.slots_display[1] == self.slots_display[2]:
+            multiplier = self.slot_values[self.slots_display[0]]
+            winnings = int(self.bet_amount * multiplier)
+            self.score += winnings
+            if multiplier > 1:
+                self.result_message, _ = f"JACKPOT! {multiplier}x MULTIPLIER!", self.assets.play_sound("jackpot")  # type: ignore
+            elif multiplier == 1:
+                self.result_message = "Got your bet back!"
+            else:
+                self.result_message = "You lost your bet!"
+            if multiplier >= 1:
+                self.assets.play_sound(
+                    random.choice(["rampage", "godlike", "holyshit", "unstoppable"])
+                )
+            elif multiplier == 0:
+                self.assets.play_sound("dangit")
+        else:
+            counts = Counter(self.slots_display)
+            most_common_symbol, count = counts.most_common(1)[0]
+            if count == 2:
+                multiplier = self.slot_values[most_common_symbol] * 0.5
+                winnings = int(self.bet_amount * multiplier)
+                self.score += winnings
+                if winnings > 0:
+                    self.result_message, _ = f"Two matches! {multiplier:.1f}x your bet!", self.assets.play_sound("jackpot")  # type: ignore
+                else:
+                    self.result_message, _ = "You lost half your bet!", self.assets.play_sound("dangit")  # type: ignore
+            else:
+                self.result_message, _ = "No matches. Try again?", self.assets.play_sound("dangit")  # type: ignore
+
+    def _draw_ui(self):
+        self.surface.fill((0, 0, 0))
+        self.renderer.draw_text(
+            "TETRIS SLOT MACHINE",
+            40,
+            (255, 215, 0),
+            Config.S_WIDTH // 2,
+            120,
+            "impact",
+            True,
+        )
+        self.renderer.draw_text(
+            f"Current Score: {self.score}",
+            30,
+            (255, 255, 255),
+            Config.S_WIDTH // 2,
+            175,
+            center_x=True,
+        )
+
+        slot_area = pygame.Rect(Config.S_WIDTH // 2 - 200, 220, 400, 150)
+        pygame.draw.rect(self.surface, (50, 50, 50), slot_area)
+        pygame.draw.rect(self.surface, (150, 150, 150), slot_area, 5)
+
+        for i, sym_char in enumerate(self.slots_display):
+            sym_surf = self.slot_font.render(sym_char, 1, (255, 255, 255))
+            self.surface.blit(
+                sym_surf,
+                (
+                    slot_area.x + 70 + i * 120 - sym_surf.get_width() // 2,
+                    slot_area.centery - sym_surf.get_height() // 2,
+                ),
+            )
+
+        if self.result_message:
+            self.renderer.draw_text(
+                self.result_message,
+                35,
+                (255, 215, 0),
+                Config.S_WIDTH // 2,
+                407,
+                center_x=True,
+            )
+            self.renderer.draw_text(
+                f"New Score: {self.score}",
+                35,
+                (255, 255, 255),
+                Config.S_WIDTH // 2,
+                447,
+                center_x=True,
+            )
+
+        # Buttons
+        self.spin_btn_rect = pygame.Rect(Config.S_WIDTH // 2 - 150, 480, 300, 50)
+        self.exit_btn_rect = pygame.Rect(Config.S_WIDTH // 2 - 150, 625, 300, 50)
+        self.cheat_btn_rect = pygame.Rect(50, 480, 180, 50)
+        self.deposit_btn_rect = pygame.Rect(Config.S_WIDTH - 50 - 180, 480, 180, 50)
+
+        if not self.spinning:
+            pygame.draw.rect(self.surface, (0, 128, 0), self.spin_btn_rect)
+            self.renderer.draw_text(
+                "SPIN AGAIN",
+                30,
+                (255, 255, 255),
+                self.spin_btn_rect.centerx,
+                self.spin_btn_rect.centery,
+                center_x=True,
+                center_y=True,
+            )
+            pygame.draw.rect(self.surface, (128, 0, 128), self.cheat_btn_rect)
+            self.renderer.draw_text(
+                "LUCKY SPIN",
+                30,
+                (255, 255, 255),
+                self.cheat_btn_rect.centerx,
+                self.cheat_btn_rect.centery,
+                center_x=True,
+                center_y=True,
+            )
+            pygame.draw.rect(self.surface, (0, 128, 128), self.deposit_btn_rect)
+            self.renderer.draw_text(
+                "DEPOSIT +1000",
+                30,
+                (255, 255, 255),
+                self.deposit_btn_rect.centerx,
+                self.deposit_btn_rect.centery,
+                center_x=True,
+                center_y=True,
+            )
+            for i, bet in enumerate(self.bet_options):
+                bet_r = pygame.Rect(50 + i * 150, 550, 100, 50)
+                color = (0, 100, 0) if self.bet_amount == bet else (128, 128, 0)
+                pygame.draw.rect(self.surface, color, bet_r)
+                self.renderer.draw_text(
+                    f"BET {bet}",
+                    30,
+                    (255, 255, 255),
+                    bet_r.centerx,
+                    bet_r.centery,
+                    center_x=True,
+                    center_y=True,
+                )
+
+        pygame.draw.rect(self.surface, (128, 0, 0), self.exit_btn_rect)
+        self.renderer.draw_text(
+            "TAKE SCORE & EXIT",
+            30,
+            (255, 255, 255),
+            self.exit_btn_rect.centerx,
+            self.exit_btn_rect.centery,
+            center_x=True,
+            center_y=True,
+        )
+
+    def play(self):
+        self.assets.play_sound("gogamble")
+        running, clock = True, pygame.time.Clock()
+        while running:
+            time_now = pygame.time.get_ticks()
+            mouse_pos = pygame.mouse.get_pos()
+
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    quit()
                 if (
-                    knob_x - knob_radius <= mx <= knob_x + knob_radius
-                    and slider_y - knob_radius <= my <= slider_y + knob_radius
+                    event.type == pygame.MOUSEBUTTONDOWN
+                    and event.button == 1
+                    and not self.spinning
                 ):
-                    dragging = True
-            if event.type == pygame.MOUSEBUTTONUP:
-                dragging = False
-            if event.type == pygame.MOUSEMOTION and dragging:
-                mx, _ = pygame.mouse.get_pos()
-                # Clamp knob position
-                mx = max(slider_x, min(slider_x + slider_width, mx))
-                volume = (mx - slider_x) / slider_width
-                set_all_sounds_volume(volume)
-    pygame.quit()
+                    if self.spin_btn_rect.collidepoint(mouse_pos):
+                        if self.score >= self.bet_amount:
+                            self.score -= self.bet_amount
+                            self.spinning = True
+                            self.spin_start_time = time_now
+                            self.slots_display = [
+                                random.choices(self.symbols, self.weights)[0]
+                                for _ in range(3)
+                            ]
+                            self.result_message, self.spin_sound_playing = None, False
+                            self.assets.play_sound("tap")
+                        else:
+                            self.result_message = "Not enough points to spin!"
+                    elif self.exit_btn_rect.collidepoint(mouse_pos):
+                        return self.score
+                    elif self.cheat_btn_rect.collidepoint(mouse_pos):
+                        self.cheat_activated, self.spinning, self.spin_start_time = (
+                            True,
+                            True,
+                            time_now,
+                        )
+                        self.result_message, self.spin_sound_playing = None, False
+                        self.assets.play_sound("tap")
+                    elif self.deposit_btn_rect.collidepoint(mouse_pos):
+                        self.score += 1000
+                        self.result_message = "DEPOSIT ADDED! +1000 POINTS!"
+                        self.assets.play_sound("coinhandle")
+                    else:
+                        for i, bet_val in enumerate(self.bet_options):
+                            if pygame.Rect(50 + i * 150, 550, 100, 50).collidepoint(
+                                mouse_pos
+                            ):
+                                self.bet_amount, self.result_message = (
+                                    bet_val,
+                                    f"Bet amount set to {bet_val}",
+                                )
+                                self.assets.play_sound("tap")
+                                break
+
+            if self.spinning:
+                if not self.spin_sound_playing:
+                    self.assets.play_sound("coinhandle")
+                    self.spin_sound_playing = True
+                if time_now - self.spin_start_time < self.spin_duration:
+                    if (time_now - self.spin_start_time) % 100 < 50:
+                        self.slots_display = [
+                            random.choices(self.symbols, self.weights)[0]
+                            for _ in range(3)
+                        ]
+                else:
+                    self._handle_spin_result()
+
+            self._draw_ui()
+            pygame.display.update()
+            clock.tick(30)
+        return self.score
 
 
-def pause_menu(surface):
-    global volume
-    paused = True
-    font = pygame.font.SysFont("comicsans", 50)
-    resume_text = font.render("Resume", True, (255, 255, 255))
-    new_game_text = font.render("New Game", True, (255, 255, 255))
-    exit_text = font.render("Exit", True, (255, 255, 255))
-    # Simple button rectangles for demonstration
-    resume_rect = resume_text.get_rect(center=(400, 250))
-    new_game_rect = new_game_text.get_rect(center=(400, 350))
-    exit_rect = exit_text.get_rect(center=(400, 450))
+# --- UI Manager (Menus, Game Over) ---
+class UIManager:
+    def __init__(self, surface, renderer, asset_manager):
+        self.surface, self.renderer, self.assets = surface, renderer, asset_manager
+        self.volume_slider_dragging = False
 
-    # Slider dimensions (same as main menu)
-    slider_x = 200
-    slider_y = 520
-    slider_width = 400
-    slider_height = 8
-    knob_radius = 15
-    dragging = False
-
-    while paused:
-        surface.fill((0, 0, 0))
-
-        # Draw pause menu buttons
-        surface.blit(resume_text, resume_rect)
-        surface.blit(new_game_text, new_game_rect)
-        surface.blit(exit_text, exit_rect)
-
-        # Draw volume slider
-        pygame.draw.rect(
-            surface, (180, 180, 180), (slider_x, slider_y, slider_width, slider_height)
+    def _draw_volume_slider(self, y_pos):
+        sx, sw, sh, kr = 200, 400, 8, 15
+        pygame.draw.rect(self.surface, (180, 180, 180), (sx, y_pos, sw, sh))
+        knob_x = int(sx + self.assets.volume * sw)
+        knob_r = pygame.Rect(0, 0, kr * 2, kr * 2)
+        knob_r.center = (knob_x, y_pos + sh // 2)
+        pygame.draw.circle(self.surface, (255, 215, 0), knob_r.center, kr)
+        self.renderer.draw_text(
+            f"Volume: {int(self.assets.volume*100)}%",
+            24,
+            (255, 255, 255),
+            sx + sw + 30,
+            y_pos - 10,
         )
-        knob_x = int(slider_x + volume * slider_width)
-        pygame.draw.circle(
-            surface, (255, 215, 0), (knob_x, slider_y + slider_height // 2), knob_radius
-        )
-        # Volume label
-        vol_font = pygame.font.SysFont("comicsans", 24)
-        vol_label = vol_font.render(f"Volume: {int(volume*100)}%", 1, (255, 255, 255))
-        surface.blit(vol_label, (slider_x + slider_width + 30, slider_y - 20))
+        return knob_r, sx, sw
 
-        pygame.display.update()
+    def _handle_volume_slider_events(self, event, knob_rect, slider_x, slider_width):
+        if (
+            event.type == pygame.MOUSEBUTTONDOWN
+            and event.button == 1
+            and knob_rect.collidepoint(event.pos)
+        ):
+            self.volume_slider_dragging = True
+        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            self.volume_slider_dragging = False
+        elif event.type == pygame.MOUSEMOTION and self.volume_slider_dragging:
+            self.assets.set_volume((event.pos[0] - slider_x) / slider_width)
 
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                return "exit"
-            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                if resume_rect.collidepoint(event.pos):
-                    return "resume"
-                if new_game_rect.collidepoint(event.pos):
-                    return "new_game"
-                if exit_rect.collidepoint(event.pos):
+    def main_menu(self):
+        if not hasattr(UIManager, "_sound_played"):
+            UIManager._sound_played = True
+            self.assets.play_sound("prepare")
+        running, clock = True, pygame.time.Clock()
+        while running:
+            self.surface.fill((0, 0, 0))
+            self.renderer.draw_text(
+                "TETRIS",
+                80,
+                (255, 255, 255),
+                Config.S_WIDTH / 2,
+                190,
+                center_x=True,
+                center_y=True,
+            )
+            self.renderer.draw_text(
+                "Are you ready to play?",
+                40,
+                (255, 255, 255),
+                Config.S_WIDTH / 2,
+                320,
+                center_x=True,
+                center_y=True,
+            )
+            self.renderer.draw_text(
+                "Press SPACE to start",
+                40,
+                (255, 255, 255),
+                Config.S_WIDTH / 2,
+                380,
+                center_x=True,
+                center_y=True,
+            )
+            self.renderer.draw_text(
+                "Press ESC to exit",
+                40,
+                (255, 255, 255),
+                Config.S_WIDTH / 2,
+                440,
+                center_x=True,
+                center_y=True,
+            )
+            kr, sx, sw = self._draw_volume_slider(600)
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
                     return "exit"
-                mx, my = pygame.mouse.get_pos()
-                if (
-                    knob_x - knob_radius <= mx <= knob_x + knob_radius
-                    and slider_y - knob_radius <= my <= slider_y + knob_radius
-                ):
-                    dragging = True
-            if event.type == pygame.MOUSEBUTTONUP:
-                dragging = False
-            if event.type == pygame.MOUSEMOTION and dragging:
-                mx, _ = pygame.mouse.get_pos()
-                mx = max(slider_x, min(slider_x + slider_width, mx))
-                volume = (mx - slider_x) / slider_width
-                set_all_sounds_volume(volume)
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_SPACE:
+                        return "start_game"
+                    if event.key == pygame.K_ESCAPE:
+                        return "exit"
+                self._handle_volume_slider_events(event, kr, sx, sw)
+            pygame.display.update()
+            clock.tick(30)
+        return "exit"
+
+    def _create_menu_buttons(self, items):
+        buttons = []
+        font = self.assets.get_font("comicsans", 50)
+        for i, (text, action) in enumerate(items):
+            label = font.render(text, True, (255, 255, 255))
+            rect = label.get_rect(center=(Config.S_WIDTH // 2, 250 + i * 100))
+            buttons.append({"label": label, "rect": rect, "action": action})
+        return buttons
+
+    def pause_menu(self):
+        paused, clock = True, pygame.time.Clock()
+        buttons = self._create_menu_buttons(
+            [("Resume", "resume"), ("New Game", "new_game"), ("Exit", "exit_game")]
+        )
+        while paused:
+            self.surface.fill((0, 0, 0))
+            for btn in buttons:
+                self.surface.blit(btn["label"], btn["rect"])
+            kr, sx, sw = self._draw_volume_slider(520)
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    return "exit_game"
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    return "resume"
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    for btn in buttons:
+                        if btn["rect"].collidepoint(event.pos):
+                            return btn["action"]
+                self._handle_volume_slider_events(event, kr, sx, sw)
+            pygame.display.update()
+            clock.tick(30)
+        return "resume"
+
+    def game_over_screen(self, score, lines, time):
+        running, clock = True, pygame.time.Clock()
+        slot_btn_rect = pygame.Rect(Config.S_WIDTH // 2 - 150, 450, 300, 50)
+        exit_btn_rect = pygame.Rect(Config.S_WIDTH // 2 - 150, 520, 300, 50)
+        while running:
+            self.surface.fill((0, 0, 0))
+            self.renderer.draw_text(
+                "GAME OVER", 60, (255, 0, 0), Config.S_WIDTH // 2, 130, "impact", True
+            )
+            self.renderer.draw_text(
+                f"Survival Time: {time:.1f}s",
+                40,
+                (255, 255, 255),
+                Config.S_WIDTH // 2,
+                220,
+                center_x=True,
+            )
+            self.renderer.draw_text(
+                f"Lines Cleared: {lines}",
+                40,
+                (255, 255, 255),
+                Config.S_WIDTH // 2,
+                270,
+                center_x=True,
+            )
+            self.renderer.draw_text(
+                f"Final Score: {score}",
+                40,
+                (255, 255, 255),
+                Config.S_WIDTH // 2,
+                320,
+                center_x=True,
+            )
+            self.renderer.draw_text(
+                "Try Your Luck?",
+                20,
+                (255, 215, 0),
+                Config.S_WIDTH // 2,
+                420,
+                center_x=True,
+            )
+            pygame.draw.rect(self.surface, (0, 128, 0), slot_btn_rect)
+            self.renderer.draw_text(
+                "SPIN THE SLOTS!",
+                30,
+                (255, 255, 255),
+                slot_btn_rect.centerx,
+                slot_btn_rect.centery,
+                center_x=True,
+                center_y=True,
+            )
+            pygame.draw.rect(self.surface, (128, 0, 0), exit_btn_rect)
+            self.renderer.draw_text(
+                "EXIT GAME",
+                30,
+                (255, 255, 255),
+                exit_btn_rect.centerx,
+                exit_btn_rect.centery,
+                center_x=True,
+                center_y=True,
+            )
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    return score, "exit_game"
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    if slot_btn_rect.collidepoint(event.pos):
+                        return score, "play_slots"
+                    if exit_btn_rect.collidepoint(event.pos):
+                        return score, "exit_game"
+            pygame.display.update()
+            clock.tick(30)
+        return score, "exit_game"
 
 
-win = pygame.display.set_mode((s_width, s_height))
-pygame.display.set_caption("Tetris")
+# --- Tetris Game Class ---
+class TetrisGame:
+    def __init__(self, surface, assets, renderer, ui_manager, popup_manager):
+        self.surface, self.assets, self.renderer = surface, assets, renderer
+        self.ui_manager, self.popup_manager = ui_manager, popup_manager
+        self.game_logic = GameLogic()
+        self.clock = pygame.time.Clock()
+        self._reset_game_state()  # Initialize all game state variables
 
-main_menu()  # start game
+    def _reset_game_state(self):
+        self.game_logic = GameLogic()  # New grid and locked positions
+        self.score, self.fall_time, self.level_time = 0, 0, 0
+        self.fall_speed = 0.27
+        self.current_piece = self.game_logic.get_random_piece()
+        self.next_piece = self.game_logic.get_random_piece()
+        self.held_piece, self.can_hold = None, True
+        self.first_piece_placed = False
+        self.popup_manager.popups.clear()
+        self.start_time_ticks = pygame.time.get_ticks()
+        self.total_lines_cleared = 0
+        self.pause_start_time = 0  # For accurate survival time calculation
+
+    def _handle_input(self):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return "quit_application"
+            if event.type == pygame.KEYDOWN:
+                if not self.current_piece:
+                    continue
+                if event.key == pygame.K_ESCAPE:
+                    self.pause_start_time = pygame.time.get_ticks()
+                    action = self.ui_manager.pause_menu()
+                    self.start_time_ticks += (
+                        pygame.time.get_ticks() - self.pause_start_time
+                    )  # Adjust for pause duration
+                    if action == "new_game":
+                        return "new_game"
+                    if action == "exit_game":
+                        return "quit_application"
+                elif event.key == pygame.K_LEFT:
+                    self.current_piece.x -= 1
+                    self._validate_move(-1, 0)
+                elif event.key == pygame.K_RIGHT:
+                    self.current_piece.x += 1
+                    self._validate_move(1, 0)
+                elif event.key == pygame.K_DOWN:
+                    self.current_piece.y += 1
+                    self._validate_move(0, 1, soft_drop=True)
+                elif event.key == pygame.K_UP:
+                    self._rotate_piece()
+                elif event.key == pygame.K_SPACE:
+                    return self._hard_drop()
+                elif event.key in [pygame.K_LSHIFT, pygame.K_RSHIFT, pygame.K_c]:
+                    self._hold_piece()
+        return None
+
+    def _validate_move(self, dx, dy, soft_drop=False):
+        if not self.game_logic.valid_space(self.current_piece):
+            self.current_piece.x -= dx
+            self.current_piece.y -= dy
+            if (
+                dy > 0 and not soft_drop
+            ):  # If move was downwards and invalid (hit something)
+                return True  # Signal to lock piece
+        elif soft_drop:
+            self.fall_time = 0  # Reset fall timer for responsive soft drop
+        return False  # Move was valid or corrected
+
+    def _rotate_piece(self):
+        original_rotation = self.current_piece.rotation
+        self.current_piece.rotation = (self.current_piece.rotation + 1) % len(
+            self.current_piece.shape_format
+        )
+        if not self.game_logic.valid_space(self.current_piece):
+            self.current_piece.rotation = original_rotation  # Revert
+
+    def _hard_drop(self):
+        while self.game_logic.valid_space(self.current_piece):
+            self.current_piece.y += 1
+        self.current_piece.y -= 1
+        return "lock_piece"
+
+    def _hold_piece(self):
+        if self.can_hold:
+            if self.held_piece is None:
+                self.held_piece, self.current_piece = (
+                    self.current_piece,
+                    self.next_piece,
+                )
+                self.next_piece = self.game_logic.get_random_piece()
+            else:
+                self.held_piece, self.current_piece = (
+                    self.current_piece,
+                    self.held_piece,
+                )
+            self.held_piece.x, self.held_piece.y = Config.GRID_COLS // 2, 0
+            # Ensure new current piece is valid, if not, it might be game over or needs adjustment
+            if (
+                not self.game_logic.valid_space(self.current_piece)
+                and self.current_piece is not None
+            ):
+                # This is a tricky state, could be game over if no valid spot.
+                # For simplicity, we assume it will be caught by check_lost or next valid_space check.
+                pass
+            self.can_hold = False
+
+    def _update_game_state(self):
+        if not self.current_piece:
+            return False
+        self.fall_time += self.clock.get_rawtime()
+        self.level_time += self.clock.get_rawtime()
+        if self.level_time / 1000 > 4:
+            self.level_time = 0
+            self.fall_speed = max(0.12, self.fall_speed - 0.005)
+
+        if self.fall_time / 1000 >= self.fall_speed:
+            self.fall_time = 0
+            self.current_piece.y += 1
+            if not self.game_logic.valid_space(self.current_piece):
+                self.current_piece.y -= 1
+                return True  # Signal to lock piece
+        return False
+
+    def _handle_piece_locked(self):
+        self.game_logic.lock_piece(self.current_piece)
+        self.assets.play_sound("tap")
+        if not self.first_piece_placed:
+            self.assets.play_sound("firstblood")
+            self.popup_manager.create_popup("FIRST BLOOD!", color=(220, 20, 60))
+            self.first_piece_placed = True
+
+        lines = self.game_logic.clear_rows()
+        self.total_lines_cleared += lines
+        if lines > 0:
+            sounds = ["humiliation", "multi_kill", "mega_kill", "ultra_kill"]
+            popups = ["HUMILIATION!", "MULTI KILL!", "MEGA KILL!", "ULTRA KILL!"]
+            scores = [100, 300, 500, 800]
+            colors = [(255, 100, 100), (255, 50, 50), (255, 20, 20), (200, 0, 0)]
+            idx = min(lines - 1, len(sounds) - 1)
+            self.score += scores[idx]
+            self.assets.play_sound(sounds[idx])
+            self.popup_manager.create_popup(popups[idx], color=colors[idx])
+
+        self.current_piece, self.next_piece = (
+            self.next_piece,
+            self.game_logic.get_random_piece(),
+        )
+        self.can_hold = True
+        if self.current_piece and not self.game_logic.valid_space(
+            self.current_piece
+        ):  # New piece causes immediate game over
+            return True
+        return False  # Game continues
+
+    def run_game(self):
+        self._reset_game_state()
+        running = True
+        while running:
+            action = self._handle_input()
+            if action == "quit_application":
+                return "quit_application", self.score
+            if action == "new_game":
+                self._reset_game_state()
+                continue
+            if action == "lock_piece" and self._handle_piece_locked():
+                running = False
+                break
+
+            if self._update_game_state() and self._handle_piece_locked():
+                running = False
+                break
+
+            self.renderer.draw_main_tetris_window(
+                self.game_logic.grid,
+                self.score,
+                self.current_piece,
+                self.next_piece,
+                self.held_piece,
+                self.game_logic,
+            )
+            self.popup_manager.draw_popups(self.surface)
+            pygame.display.update()
+            if self.game_logic.check_lost():
+                running = False
+            self.clock.tick(60)
+
+        self.assets.play_sound("oneandonly")
+        self.renderer.draw_text_middle(
+            "You Lost", 40, (255, 255, 255), y_offset=-50
+        )  # Draw on top
+        self.popup_manager.draw_popups(self.surface)  # Draw any lingering popups
+        pygame.display.update()
+        pygame.time.delay(2000)
+
+        time_survived = (pygame.time.get_ticks() - self.start_time_ticks) / 1000.0
+        final_score, next_action = self.ui_manager.game_over_screen(
+            self.score, self.total_lines_cleared, time_survived
+        )
+        if next_action == "play_slots":
+            slot_machine = SlotMachine(
+                self.surface, self.renderer, self.assets, final_score
+            )
+            final_score = slot_machine.play()
+            return "main_menu", final_score
+        return (
+            "quit_application" if next_action == "exit_game" else "main_menu"
+        ), final_score
+
+
+# --- Main Application ---
+class Application:
+    def __init__(self):
+        pygame.init()
+        self.surface = pygame.display.set_mode((Config.S_WIDTH, Config.S_HEIGHT))
+        pygame.display.set_caption("Tetris Refactored")
+        self.assets = AssetManager()
+        self.renderer = Renderer(self.surface, self.assets)
+        self.popup_manager = PopupManager(self.renderer)
+        self.ui_manager = UIManager(self.surface, self.renderer, self.assets)
+        self.tetris_game = TetrisGame(
+            self.surface,
+            self.assets,
+            self.renderer,
+            self.ui_manager,
+            self.popup_manager,
+        )
+        self.current_score = 0
+
+    def run(self):
+        current_view, running = "main_menu", True
+        while running:
+            if current_view == "main_menu":
+                action = self.ui_manager.main_menu()
+                if action == "start_game":
+                    current_view = "game"
+                elif action == "exit":
+                    running = False
+            elif current_view == "game":
+                next_view, self.current_score = self.tetris_game.run_game()
+                if next_view == "quit_application":
+                    running = False
+                else:
+                    current_view = next_view
+        pygame.quit()
+
+
+if __name__ == "__main__":
+    app = Application()
+    app.run()
