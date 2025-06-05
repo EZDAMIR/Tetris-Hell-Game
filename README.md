@@ -13,6 +13,16 @@ Built with Python and Pygame.
 - High scores table with sortable columns
 - Sound effects and emoji graphics
 
+## How to Launch
+
+1. Make sure you have **Python 3.7+** installed.
+2. Install the required dependencies:
+   ```bash
+   pip install -r requirements.txt
+3. Start the application by running:
+    ```bash
+    python main.py
+
 ## How to Play
 
 1. **Play Tetris** to earn points.
