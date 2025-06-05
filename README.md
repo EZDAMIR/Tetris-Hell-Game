@@ -45,10 +45,14 @@ Built with Python and Pygame.
 ## File Structure
 
 - `main.py` — Main game loop and menu
-- `tetris.py` — Tetris logic
-- `slot_machine.py` — Slot machine minigame
-- `high_scores.py` — High scores table and sorting
-- `assets/` — Sounds and images
+- `game/tetris.py` — Tetris logic  
+- `game/slot_machine.py` — Slot machine minigame  
+- `game/high_scores.py` — High scores table and sorting  
+- `game/renderer.py` — Rendering logic  
+- `game/ui.py` — User interface elements  
+- `game/config.py` — Game configuration  
+- `game/assets.py` — Asset management  
+- `assets/` — Sounds and images  
 
 ## Credits
 
